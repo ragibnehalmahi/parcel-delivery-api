@@ -6,9 +6,13 @@ import { Request, Response } from 'express';
 import bodyParser from 'body-parser';
 import { UserRouter } from './app/modules/user/user.route';
 import { AuthRoutes } from './app/modules/auth/auth.route';
+import router from './app/routes';
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: 'http://localhost:5173',
+  credentials: true,
+}));
 app.use(express.json());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -29,9 +33,8 @@ app.get("/", (req: Request, res: Response) => {
   });
 });
 
-app.use('/api/v1/user', UserRouter);
-app.use('/api/v1/auth', AuthRoutes);
-app.use('/api/v1/parcel', ParcelRoutes);
+app.use('/api/v1/', router);
+ 
 
  
 

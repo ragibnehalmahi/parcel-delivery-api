@@ -1,93 +1,110 @@
+import bcrypt from "bcryptjs";
+import jwt, { JwtPayload, SignOptions } from "jsonwebtoken";
 import httpStatus from "http-status-codes";
-import jwt, { JwtPayload } from "jsonwebtoken";
-import bcrypt from "bcryptjs"; // Changed to bcryptjs for consistency
+import { Schema, model } from "mongoose";
+
 import AppError from "../../../errorHelpers/appError";
-import { config } from "../../config/env";
 import { User } from "../user/user.model";
-import { IUser, UserRole } from "../user/user.interface";
+import { IUser, UserStatus } from "../user/user.interface";
 
+// Helper function to generate JWT tokens
+const generateToken = (payload: object, secret: string, expiresIn: string | number): string => {
+  return jwt.sign(payload, secret, { expiresIn } as SignOptions);
+};
 
-// Function to handle user login and token generation
-const credentialsLogin = async (payload: { email: string; password: string }) => {
+// Main login function
+const credentialsLogin = async (payload: Partial<IUser>) => {
   const { email, password } = payload;
 
-  const user = await User.findOne({ email });
-  if (!user) {
-    throw new AppError( httpStatus.NOT_FOUND,"User  not found",);
+  // Check if user exists and select password field
+  const existingUser = await User.findOne({ email }).select("+password");
+  if (!existingUser) {
+    throw new AppError("Email does not exist", httpStatus.BAD_REQUEST);
   }
 
-  const isPasswordValid = await bcrypt.compare(password, user.password);
-  if (!isPasswordValid) {
-    throw new AppError(httpStatus.UNAUTHORIZED,"Invalid credentials", );
+  // Check if password exists (important for select+password)
+  if (!existingUser.password) {
+    throw new AppError("User password not found", httpStatus.INTERNAL_SERVER_ERROR);
   }
 
-  if (user.status !== "ACTIVE") {
-    throw new AppError(httpStatus.FORBIDDEN,"Your account is not active", );
+  // Check if password is valid
+  const isPasswordMatched = await bcrypt.compare(password as string, existingUser.password as string);
+  if (!isPasswordMatched) {
+    throw new AppError("Incorrect Password", httpStatus.BAD_REQUEST);
   }
+
+  // Create JWT payload
+  const jwtPayload = {
+    userId: existingUser._id,
+    email: existingUser.email,
+    role: existingUser.role,
+  };
 
   // Generate tokens
-  const { accessToken, refreshToken } = generateAuthTokens(user);
+  const accessToken = generateToken(
+    jwtPayload,
+    process.env.JWT_ACCESS_SECRET as string,
+    process.env.JWT_ACCESS_EXPIRES as string || '1h'
+  );
 
-  // Ensure password is not returned in the response
-  user.password = "";
+  const refreshToken = generateToken(
+    jwtPayload,
+    process.env.JWT_REFRESH_SECRET as string,
+    process.env.JWT_REFRESH_EXPIRES as string || '7d'
+  );
+
+  // Remove password from user object before returning
+  const { password: pass, ...rest } = existingUser.toObject();
 
   return {
-    user,
     accessToken,
     refreshToken,
+    user: rest,
   };
 };
 
-// Function to generate access and refresh tokens
-const generateAuthTokens = (user: IUser) => {
-  if (!user._id) {
-    throw new AppError(httpStatus.BAD_REQUEST,"User  ID is missing while generating tokens", );
-  }
-
-  const accessTokenPayload = {
-    id: user._id.toString(),
-    email: user.email,
-    role: user.role,
-    name: user.name,
-  };
-
-  const accessToken = jwt.sign(
-    accessTokenPayload,
-    config.JWT_ACCESS_SECRET as string,
-    { expiresIn: Number(config.JWT_ACCESS_EXPIRES) || 3600 } // Default to 1 hour
-  );
-
-  const refreshToken = jwt.sign(
-    { id: user._id.toString() },
-    config.JWT_REFRESH_SECRET as string,
-    { expiresIn: Number(config.JWT_REFRESH_EXPIRES) || 604800 } // Default to 7 days
-  );
-
-  return { accessToken, refreshToken };
-};
-
-// Function to refresh access token using refresh token
+// Refresh Token Service
 const getNewAccessToken = async (refreshToken: string) => {
   if (!refreshToken) {
-    throw new AppError(httpStatus.BAD_REQUEST,"Refresh token is required" );
+    throw new AppError("Refresh token is required", httpStatus.BAD_REQUEST);
   }
 
   try {
-    const decoded = jwt.verify(refreshToken, config.JWT_REFRESH_SECRET as string) as JwtPayload;
-    const user = await User.findById(decoded.id); // Changed from _id to id
+    // Verify refresh token with REFRESH_SECRET
+    const decoded = jwt.verify(
+      refreshToken,
+      process.env.JWT_REFRESH_SECRET as string
+    ) as JwtPayload;
+
+    // Here we can take the userId from the decoded payload
+    const user = await User.findById(decoded.userId).select("+status +role +email");
 
     if (!user) {
-      throw new AppError(httpStatus.NOT_FOUND,"User  not found" );
+      throw new AppError("User not found", httpStatus.NOT_FOUND);
     }
 
-    if (user.status !== "ACTIVE") {
-      throw new AppError(httpStatus.FORBIDDEN,"Your account is not active" );
+    // Check user status
+    if (
+      user.status === UserStatus.BLOCKED ||
+      user.status === UserStatus.DELETED ||
+      user.status === UserStatus.INACTIVE
+    ) {
+      throw new AppError(
+        "User is blocked, deleted or inactive",
+        httpStatus.FORBIDDEN
+      );
     }
 
-    const newAccessToken = generateAuthTokens(user).accessToken;
-
-    // Ensure password is not returned in the response
-    user.password = "";
+    // Issue new access token with ACCESS_SECRET
+    const newAccessToken = generateToken(
+      {
+        userId: user._id,
+        email: user.email,
+        role: user.role,
+      },
+      process.env.JWT_ACCESS_SECRET as string,
+      process.env.JWT_ACCESS_EXPIRES as string || "1h"
+    );
 
     return {
       user,
@@ -95,60 +112,73 @@ const getNewAccessToken = async (refreshToken: string) => {
       refreshToken,
     };
   } catch (err) {
-    throw new AppError(httpStatus.UNAUTHORIZED,"Invalid refresh token" );
+    throw new AppError("Invalid refresh token", httpStatus.UNAUTHORIZED);
   }
 };
 
-// Function to reset user password
-// const resetPassword = async (oldPassword: string, newPassword: string, accessToken: JwtPayload) => {
-//   const decoded = jwt.verify(accessToken, config.JWT_ACCESS_SECRET as string) as JwtPayload;
-//   const user = await User.findById(decoded.id).select("+password"); // Ensure password is included for comparison
-
-//   if (!user) {
-//     throw new AppError(httpStatus.NOT_FOUND,"User  not found" );
-//   }
-
-//   const isOldPasswordValid = await bcrypt.compare(oldPassword, user.password);
-//   if (!isOldPasswordValid) {
-//     throw new AppError(httpStatus.UNAUTHORIZED,"Old password is incorrect" );
-//   }
-
-//   const isNewPasswordSame = await bcrypt.compare(newPassword, user.password);
-//   if (isNewPasswordSame) {
-//     throw new AppError(httpStatus.BAD_REQUEST,"New password cannot be the same as the old password" );
-//   }
-
-//   user.password = await bcrypt.hash(newPassword, Number(config.BCRYPT_SALT_ROUND) || 12);
-//   await user.save();
-
-//   return { message: "Password reset successfully" };
-// };
-
-const resetPassword = async (
+// Reset Password Service
+const changePassword = async (
+  userId: string,
   oldPassword: string,
-  newPassword: string,
-  decodedToken: JwtPayload
-): Promise<boolean> => {
-  
-  const user = await User.findById(decodedToken.id);
-
-
+  newPassword: string
+) => {
+  // find user by id with password field
+  const user = await User.findById(userId).select("+password");
   if (!user) {
-    throw new AppError(404,"User not found", );
+    throw new AppError("User not found", httpStatus.NOT_FOUND);
   }
 
-  const isOldPasswordMatch = await bcrypt.compare(oldPassword, user.password as string);
-  if (!isOldPasswordMatch) {
-    throw new AppError(403,"Old password doesn't match");
+  // check status
+  if (
+    user.status === UserStatus.BLOCKED ||
+    user.status === UserStatus.DELETED ||
+    user.status === UserStatus.INACTIVE
+  ) {
+    throw new AppError("User is blocked, deleted or inactive", httpStatus.FORBIDDEN);
   }
 
-  user.password = await bcrypt.hash(newPassword, 10);
-  await user.save();  
+  // check old password
+  const isOldPasswordValid = await bcrypt.compare(oldPassword, user.password as string);
+  if (!isOldPasswordValid) {
+    throw new AppError("Old password incorrect", httpStatus.UNAUTHORIZED);
+  }
 
-  return true;
+  // check if new password same as old
+  const isSame = await bcrypt.compare(newPassword, user.password as string);
+  if (isSame) {
+    throw new AppError("New password cannot be same as old", httpStatus.BAD_REQUEST);
+  }
+
+  // hash and save
+  user.password = await bcrypt.hash(
+    newPassword,
+    Number(process.env.BCRYPT_SALT_ROUNDS) || 12
+  );
+  await user.save();
+
+  return { message: "Password reset successful" };
 };
-export const AuthServices = {
+
+
+// Logout Service
+const tokenSchema = new Schema({
+  token: { type: String, required: true },
+  userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  expiresAt: { type: Date, required: true }
+}, { timestamps: true });
+
+const TokenModel = model('Token', tokenSchema);
+
+const logoutUser = async (refreshToken: string) => {
+  // remove refresh token from DB
+  await TokenModel.findOneAndDelete({ token: refreshToken });
+  return { message: "Logout successful" };
+};
+
+export const AuthService = {
   credentialsLogin,
   getNewAccessToken,
-  resetPassword,
+  changePassword,
+  logoutUser,
 };
+

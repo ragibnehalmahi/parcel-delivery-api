@@ -1,26 +1,29 @@
+//status code
+//data
+//message
+//success
+//meta
+
 import { Response } from "express";
 
-interface Tresponse<T> {
-  success: boolean;
+interface TMeta {
+  total: number;
+}
+interface IApiResponse<T> {
+  statusCode: number;
+  success?: boolean;
   message: string;
-  status: number;
   data?: T;
-  metadata?: {
-    totalCount?: number;
-    page?: number;
-    pageSize?: number;
-    totalPages?: number;
-  };
+  meta?: TMeta;
 }
 
-export const sendResponse = <T>(res: Response, response: Tresponse<T>) => {
-  const { success, message, status, data, metadata } = response;
-
-  return res.status(status).json({
-    success,
-    status,
-    message,
-    metadata,
-    data,
+const sendResponse = <T>(res: Response, data: IApiResponse<T>) => {
+  res.status(data.statusCode).json({
+    success: data.success ?? true,
+    message: data.message,
+    data: data.data,
+    meta: data.meta,
   });
 };
+
+export default sendResponse;

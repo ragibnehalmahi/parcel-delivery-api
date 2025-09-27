@@ -1,44 +1,69 @@
+ 
 import { Types } from "mongoose";
 
+ 
 export enum ParcelStatus {
-  PENDING = "PENDING",
-  IN_TRANSIT = "IN_TRANSIT",
-  DELIVERED = "DELIVERED",
-  CANCELLED = "CANCELLED",
-  BLOCKED = "BLOCKED",
+  REQUESTED = "Requested",
+  APPROVED = "Approved",
+  DISPATCHED = "Dispatched",
+  PICKED = "Picked",
+  IN_TRANSIT = "In Transit",
+  HELD = "Held",
+  DELIVERED = "Delivered",
+  RETURNED = "Returned",
+  CANCELLED = "Cancelled",
 }
 
-export interface IStatusLog {
+ 
+export interface StatusLog {
   status: ParcelStatus;
   timestamp: Date;
-  updatedBy: Types.ObjectId; // who changed status (sender/receiver/admin)
-  note?: string;
   location?: string;
+  updatedBy?: Types.ObjectId;
+  note?: string;
 }
 
-export interface IParcel {
+ 
+export interface ParcelDocument {
   _id?: Types.ObjectId;
-
-  // relations
+  trackingId: string;
   sender: Types.ObjectId;
-  receiver: Types.ObjectId;
-
-  // core fields
-  pickupLocation: string;
-  dropoffLocation: string;
-  weight: number;   // kg
-  distance: number; // km
-
-  deliveryFee: number;
-
-  // lifecycle
-  status: ParcelStatus;
-  statusLogs: IStatusLog[];
-
-  // flags
+  receiver: {
+    name: string;
+    phone: string;
+    address: string;
+    userId?: Types.ObjectId;
+  };
+  parcelType: string;
+  weight: number;
+  deliveryAddress: string;
+  currentStatus: ParcelStatus;
+  parcelFee?: number;
+  estimatedDeliveryDate?: Date;
+  isCancelled: boolean;
+  isDelivered: boolean;
   isBlocked?: boolean;
-  isDeleted?: boolean;
-
+  statusLogs: StatusLog[];
   createdAt?: Date;
   updatedAt?: Date;
+}
+
+ 
+export interface CreateParcelDTO {
+  receiver: {
+    name: string;
+    phone: string;
+    address: string;
+    userId?: string;
+  };
+  parcelType: string;
+  weight: number;
+  deliveryAddress: string;
+}
+
+ 
+export interface UpdateParcelStatusDTO {
+  status: ParcelStatus;
+  location?: string;
+  note?: string;
 }

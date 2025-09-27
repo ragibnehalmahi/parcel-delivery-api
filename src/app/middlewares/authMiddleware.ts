@@ -1,18 +1,21 @@
+ 
 import { Request, Response, NextFunction } from "express";
-import jwt, { JwtPayload } from "jsonwebtoken";
-import { config } from "../config/env"; // <-- adjust path if your file is ../config/env
+import jwt, { JwtPayload, TokenExpiredError } from "jsonwebtoken";
 import { UserRole, UserStatus } from "../modules/user/user.interface";
+import { envVars } from "../config";
 
-// Use an intersection type instead of extending Request to avoid conflicts
+// Custom request type (authenticated)
 export type AuthenticatedRequest = Request & {
-  user?: { _id: string; role: UserRole; status: UserStatus };
+  user: { _id: string; role: UserRole; status: UserStatus };
 };
 
+// Auth middleware with role-based access control
 export const auth =
   (...allowedRoles: UserRole[]) =>
-  (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  (req: Request, res: Response, next: NextFunction) => {
     try {
       const authHeader = req.headers.authorization;
+
       if (!authHeader || !authHeader.startsWith("Bearer ")) {
         return res.status(401).json({
           success: false,
@@ -22,7 +25,10 @@ export const auth =
 
       const token = authHeader.split(" ")[1];
 
-      const decoded = jwt.verify(token, config.JWT_ACCESS_SECRET) as JwtPayload & {
+      const decoded = jwt.verify(
+        token,
+        envVars.JWT_ACCESS_SECRET
+      ) as JwtPayload & {
         _id?: string;
         id?: string;
         userId?: string;
@@ -30,9 +36,8 @@ export const auth =
         status?: UserStatus;
       };
 
-      // Normalize id field: support _id | userId | id
-      const normalizedId =
-        decoded._id || decoded.userId || decoded.id;
+      // Normalize ID (supports different key names)
+      const normalizedId = decoded._id || decoded.userId || decoded.id;
 
       if (!normalizedId || !decoded.role) {
         return res.status(401).json({
@@ -41,26 +46,36 @@ export const auth =
         });
       }
 
-      // Ensure status exists (fallback if not present in token)
+      // Ensure status exists (default to ACTIVE)
       const normalizedStatus = decoded.status ?? UserStatus.ACTIVE;
 
-      // Attach to req.user using the expected shape
-      req.user = {
+      // Attach user info to request
+      (req as AuthenticatedRequest).user = {
         _id: normalizedId,
         role: decoded.role,
         status: normalizedStatus,
       };
 
-      // Role-based access check (if roles provided)
-      if (allowedRoles.length && !allowedRoles.includes(req.user.role)) {
+      // Role-based access check
+      if (
+        allowedRoles.length > 0 &&
+        !allowedRoles.includes((req as AuthenticatedRequest).user.role)
+      ) {
         return res.status(403).json({
           success: false,
-          message: "Forbidden: You do not have access to this resource",
+          message: `Forbidden: Role ${(req as AuthenticatedRequest).user.role} not allowed`,
         });
       }
 
       next();
-    } catch {
+    } catch (error) {
+      if (error instanceof TokenExpiredError) {
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized: Token expired",
+        });
+      }
+
       return res.status(401).json({
         success: false,
         message: "Unauthorized: Invalid or expired token",

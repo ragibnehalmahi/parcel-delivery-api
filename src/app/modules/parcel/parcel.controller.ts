@@ -1,205 +1,223 @@
-import { Request, Response } from "express";
-import httpStatus from "http-status";
-import { catchAsync } from "../../utils/catchAsync";
-import { sendResponse } from "../../utils/sendResponse";
+import { NextFunction, Request, Response } from "express";
+import httpStatus from "http-status-codes";
+import catchAsync from "../../utils/catchAsync"; 
+import sendResponse from "../../utils/sendResponse"; 
 import { ParcelService } from "./parcel.service";
-import { ParcelStatus } from "./parcel.interface";
-//import { JwtPayload } from "jsonwebtoken";
-//import { decodedToken } from "../../../../src/utils/";
-import { UserRole } from "../user/user.interface";
-//import {decodeToken} from "../../../../src/utils/"
-import jwt, { JwtPayload } from "jsonwebtoken";
-import { config } from "../../config/env";
+ import  { decodedToken } from "../../utils/decodeToken";
 import AppError from "../../../errorHelpers/appError";
-import { IUser } from "../user/user.interface";
-//import httpStatus from "http-status-codes"
-
+import { JwtPayload } from "jsonwebtoken";
  
  
 
-export const decodedToken = (token: string): { userId: string; role: string; email: string } => {
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as JwtPayload;
-    return {
-      userId: decoded.id,
-      role: decoded.role,
-      email: decoded.email,
-    };
-  } catch (error) {
-    throw new AppError(401,`Invalid token: ${error}` );
+// Create parcel
+const createParcel = catchAsync(async (req: Request, res: Response) => {
+  // Ensure logged-in user
+  const user = req.user as JwtPayload;
+  if (!user || !user._id) {
+    throw new AppError("Unauthorized: No user found", httpStatus.UNAUTHORIZED);
   }
-};
-// JWT payload টাইপ
-type JwtUser = { userId: string; role: UserRole };
 
-// 📦 Create parcel
-export const createParcel = catchAsync(async (req: Request, res: Response) => {
-  const token = req.headers.authorization;
-  if (!token) throw new Error("Unauthorized: No token provided");
-
-  const decode = decodedToken(token as string);
-  if (!decode) throw new Error("Unauthorized: Invalid token");
-
-  const senderId = decode.userId;
-  const parcel = await ParcelService.createParcel(req.body, senderId);
+  // Call Service
+  const parcel = await ParcelService.createParcel(req.body, user._id);
 
   sendResponse(res, {
     success: true,
-    status: httpStatus.CREATED,
+    statusCode: httpStatus.CREATED,
     message: "Parcel created successfully",
     data: parcel,
   });
 });
 
-// 📦 Get all parcels (pagination)
-export const getAllParcels = catchAsync(async (req: Request, res: Response) => {
-  const page = Number(req.query.page) || 1;
-  const limit = Number(req.query.limit) || 10;
 
-  const result = await ParcelService.getAllParcels(page, limit);
-
-  sendResponse(res, {
-    success: true,
-    status: httpStatus.OK,
-    message: "Parcels retrieved successfully",
-    data: result.data,
-    metadata: result.meta,
-  });
-});
-
-// 📦 Get single parcel (auth required)
-export const getSingleParcel = catchAsync(async (req: Request, res: Response) => {
-  const token = req.headers.authorization;
-  if (!token) throw new Error("Unauthorized: No token provided");
-
-  const decode = decodedToken(token as string);
-  if (!decode) throw new Error("Unauthorized: Invalid token");
-
-  const result = await ParcelService.getSingleParcel(req.params.id, decode as JwtUser);
-
-  sendResponse(res, {
-    success: true,
-    status: httpStatus.OK,
-    message: "Parcel retrieved successfully",
-    data: result,
-  });
-});
-
-// 📦 Confirm delivery
-export const confirmDelivery = catchAsync(async (req: Request, res: Response) => {
-  const token = req.headers.authorization;
-  if (!token) throw new Error("Unauthorized: No token provided");
-
-  const decode = decodedToken(token as string);
-  if (!decode) throw new Error("Unauthorized: Invalid token");
-
-  const result = await ParcelService.confirmDelivery(req.params.id, decode.userId);
-
-  sendResponse(res, {
-    success: true,
-    status: httpStatus.OK,
-    message: "Delivery confirmed successfully",
-    data: result,
-  });
-});
-
-// 📦 Cancel parcel
-export const cancelParcel = catchAsync(async (req: Request, res: Response) => {
-  const token = req.headers.authorization;
-  if (!token) throw new Error("Unauthorized: No token provided");
-
-  const decode = decodedToken(token as string);
-  if (!decode) throw new Error("Unauthorized: Invalid token");
-
-  const result = await ParcelService.cancelParcel(req.params.id, decode.userId);
-
-  sendResponse(res, {
-    success: true,
-    status: httpStatus.OK,
-    message: "Parcel cancelled successfully",
-    data: result,
-  });
-});
-
-// 📦 Block parcel
-export const blockParcel = catchAsync(async (req: Request, res: Response) => {
-  const token = req.headers.authorization;
-  if (!token) throw new Error("Unauthorized: No token provided");
-
-  const decode = decodedToken(token as string);
-  if (!decode) throw new Error("Unauthorized: Invalid token");
-
-  const result = await ParcelService.blockParcel(req.params.id, decode.userId);
-
-  sendResponse(res, {
-    success: true,
-    status: httpStatus.OK,
-    message: "Parcel blocked successfully",
-    data: result,
-  });
-});
-
-// 📦 Admin change status
-export const adminChangeStatus = catchAsync(async (req: Request, res: Response) => {
-  const token = req.headers.authorization;
-  if (!token) throw new Error("Unauthorized: No token provided");
-
-  const decode = decodedToken(token as string);
-  if (!decode) throw new Error("Unauthorized: Invalid token");
-
-  const { status, location, note } = req.body as {
-    status: ParcelStatus;
-    location?: string;
-    note?: string;
+// Get all parcels (Admin only)
+const getAllParcels = catchAsync(async (req: Request, res: Response) => {
+  const filters = {
+    status: req.query.status as string,
+    isCancelled: req.query.isCancelled ? req.query.isCancelled === 'true' : undefined,
+    isDelivered: req.query.isDelivered ? req.query.isDelivered === 'true' : undefined,
+    isBlocked: req.query.isBlocked ? req.query.isBlocked === 'true' : undefined,
   };
 
-  const result = await ParcelService.adminChangeStatus(
+  const parcels = await ParcelService.getAllParcels(filters);
+
+  sendResponse(res, {
+    success: true,
+    statusCode: httpStatus.OK,
+    message: "Parcels retrieved successfully",
+    data: parcels,
+  });
+});
+
+// Get my parcels (Sender)
+export const getMyParcels = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+   
+  if (!req.user) {
+    throw new AppError('Unauthorized: User data not found.',httpStatus.UNAUTHORIZED, );
+  }
+  
+   
+  const senderId = req.user.id;
+
+  const parcels = await ParcelService.getMyParcels(senderId);
+
+  sendResponse(res, {
+    success: true,
+    statusCode: httpStatus.OK,
+    message: 'Your parcels retrieved successfully',
+    data: parcels,
+  });
+});
+ 
+const getIncomingParcels = catchAsync(async (req: Request, res: Response) => {
+  
+  const user = req.user; 
+  if (!user) {
+    throw new AppError("Unauthorized: No user found", httpStatus.UNAUTHORIZED);
+  }
+
+   
+  const parcels = await ParcelService.getIncomingParcels(user._id);
+
+  sendResponse(res, {
+    success: true,
+    statusCode: httpStatus.OK,
+    message: "Incoming parcels retrieved successfully",
+    data: parcels,
+  });
+});
+
+
+// Get single parcel
+const getSingleParcel = catchAsync(async (req: Request, res: Response) => {
+   
+  if (!req.user) {
+    throw new AppError("Unauthorized: No user found",httpStatus.UNAUTHORIZED );
+  }
+
+  const parcel = await ParcelService.getSingleParcel(req.params.id, req.user);
+
+  sendResponse(res, {
+    success: true,
+    statusCode: httpStatus.OK,
+    message: "Parcel retrieved successfully",
+    data: parcel,
+  });
+});
+
+
+ 
+const cancelParcel = catchAsync(async (req: Request, res: Response) => {
+  const user = req.user;
+  if (!user) {
+    throw new AppError("Unauthorized: No user found", httpStatus.UNAUTHORIZED);
+  }
+
+  const parcel = await ParcelService.cancelParcel(req.params.id, user._id);
+
+  sendResponse(res, {
+    success: true,
+    statusCode: httpStatus.OK,
+    message: "Parcel cancelled successfully",
+    data: parcel,
+  });
+});
+
+
+// Update parcel status (Admin only)
+const updateParcelStatus = catchAsync(async (req: Request, res: Response) => {
+  const user = req.user;
+  if (!user) {
+    throw new AppError("Unauthorized: No user found", httpStatus.UNAUTHORIZED);
+  }
+
+  const parcel = await ParcelService.updateParcelStatus(
     req.params.id,
-    decode.userId,
-    status,
-    { location, note }
+    req.body,
+    user._id    
   );
 
   sendResponse(res, {
     success: true,
-    status: httpStatus.OK,
+    statusCode: httpStatus.OK,
     message: "Parcel status updated successfully",
-    data: result,
+    data: parcel,
   });
 });
 
-// 📦 Get my parcels
-export const getMyParcels = catchAsync(async (req: Request, res: Response) => {
-  const token = req.headers.authorization;
-  if (!token) throw new Error("Unauthorized: No token provided");
 
-  const decode = decodedToken(token as string);
-  if (!decode) throw new Error("Unauthorized: Invalid token");
-
-  const data = await ParcelService.getMyParcels(decode.userId);
+// Delete parcel (Admin only)
+const deleteParcel = catchAsync(async (req: Request, res: Response) => {
+  const parcel = await ParcelService.deleteParcel(req.params.id);
 
   sendResponse(res, {
     success: true,
-    status: httpStatus.OK,
-    message: "My parcels retrieved successfully",
-    data,
+    statusCode: httpStatus.OK,
+    message: "Parcel deleted successfully",
+    data: parcel,
   });
 });
+// Confirm delivery (Receiver only)
+const confirmDelivery = catchAsync(async (req: Request, res: Response) => {
+  const user = req.user; // Assuming your authentication middleware attaches the user to the request
+  if (!user) {
+    throw new AppError("Unauthorized: No user found", httpStatus.UNAUTHORIZED);
+  }
 
-// 📦 Get incoming parcels for receiver
-export const getIncomingParcels = catchAsync(async (req: Request, res: Response) => {
-  const token = req.headers.authorization;
-  if (!token) throw new Error("Unauthorized: No token provided");
+  const { id } = req.params;
+  const receiverId = user._id;
 
-  const decode = decodedToken(token as string);
-  if (!decode) throw new Error("Unauthorized: Invalid token");
-
-  const data = await ParcelService.getIncomingParcels(decode.userId);
+  const parcel = await ParcelService.confirmDelivery(id, receiverId);
 
   sendResponse(res, {
     success: true,
-    status: httpStatus.OK,
-    message: "Incoming parcels retrieved successfully",
-    data,
+    statusCode: httpStatus.OK,
+    message: "Parcel delivery confirmed successfully",
+    data: parcel,
   });
 });
+
+ // 🔹 Public tracking controller
+const trackParcel = async (req: Request, res: Response) => {
+  try {
+    const { trackingId } = req.params;
+
+    const parcel = await ParcelService.getParcelByTrackingId(trackingId);
+
+    if (!parcel) {
+      return res.status(404).json({
+        success: false,
+        message: "Parcel not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: parcel,
+    });
+  } catch (error) {
+    console.error("❌ Error in trackParcel:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error while tracking parcel",
+    });
+  }
+};
+
+
+ 
+export const ParcelController = {
+  createParcel,
+  getAllParcels,
+  getMyParcels,
+    getIncomingParcels,
+  getSingleParcel,
+  cancelParcel,
+  updateParcelStatus,
+  deleteParcel,
+  confirmDelivery,
+  trackParcel,
+
+};
+ 
+
+ 

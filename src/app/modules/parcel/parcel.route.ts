@@ -1,97 +1,76 @@
 import express from "express";
-import { validateRequest } from "../../../middlewares/validateRequest";
-import { auth } from "../../middlewares/authMiddleware"; 
-import {
-  createParcelZodSchema,
-  updateParcelZodSchema,
-  changeStatusZodSchema,
-} from "./parcel.validation";
-import {
-  createParcel,
-  getAllParcels,
-  getSingleParcel,
-  confirmDelivery,
-  cancelParcel,
-  blockParcel,
-  adminChangeStatus,
-  getMyParcels,
-  getIncomingParcels,
-} from "./parcel.controller";
-import { UserRole } from "../user/user.interface";
+import { ParcelController } from "./parcel.controller";
+import { auth } from "../../middlewares/authMiddleware"; // Assuming auth middleware exists
+import { validate } from "../../middlewares/validate"; // Assuming a validate middleware exists
+import { UserRole } from "../user/user.interface"; // Assuming UserRole is imported
+import { createParcelValidation ,updateParcelStatusValidation } from "./parcel.validation"; // Assuming createParcelValidation exists
 
 const router = express.Router();
 
-/**
- * Create parcel (SENDER)
- * sender comes from token
- */
- 
+// ✅ Public tracking route (no auth middleware)
+router.get("/track/:trackingId", ParcelController.trackParcel);
+// Create parcel (Sender only)
+
 router.post(
   "/",
   auth(UserRole.SENDER),
-  validateRequest(createParcelZodSchema),
-  createParcel
+  validate(createParcelValidation),
+  ParcelController.createParcel
 );
 
-/**
- * ADMIN: list all parcels (paginated)
- */
-router.get("/", auth(UserRole.ADMIN), getAllParcels);
+// Get all parcels (Admin only)
+router.get(
+  "/",
+  auth(UserRole.ADMIN),
+  ParcelController.getAllParcels
+);
 
-/**
- * Get single parcel (ADMIN or parcel owner/receiver)
- */
+// Get my parcels (Sender only)
+router.get(
+  "/my-parcels",
+  auth(UserRole.SENDER),
+  ParcelController.getMyParcels
+);
+// Get incoming parcels (Receiver only)
+router.get(
+  "/incoming-parcels",
+  auth(UserRole.RECEIVER),
+  ParcelController.getIncomingParcels
+);
+
+// Get single parcel (Sender, Receiver, Admin)
 router.get(
   "/:id",
-  auth(UserRole.ADMIN, UserRole.SENDER, UserRole.RECEIVER),
-  getSingleParcel
+  auth(UserRole.SENDER, UserRole.RECEIVER, UserRole.ADMIN),
+  ParcelController.getSingleParcel
 );
 
-/**
- * RECEIVER confirms delivery
- */
+// Cancel parcel (Sender only)
 router.patch(
-  "/confirm/:id",
-  auth(UserRole.RECEIVER),
-  confirmDelivery
-);
-
-/**
- * SENDER cancels own parcel (not delivered)
- */
-router.patch(
-  "/cancel/:id",
+  "/:id/cancel",
   auth(UserRole.SENDER),
-  cancelParcel
+  ParcelController.cancelParcel
 );
 
-/**
- * ADMIN blocks a parcel
- */
+// Update parcel status (Admin only)
 router.patch(
-  "/block/:id",
+  "/:id/status",
   auth(UserRole.ADMIN),
-  blockParcel
+  validate(updateParcelStatusValidation),
+  ParcelController.updateParcelStatus
 );
 
-/**
- * ADMIN can set status to PENDING / IN_TRANSIT
- */
+// Delete parcel (Admin only)
+router.delete(
+  "/:id",
+  auth(UserRole.ADMIN),
+  ParcelController.deleteParcel
+);
+// Confirm delivery (Receiver only)
+ 
 router.patch(
-  "/status/:id",
-  auth(UserRole.ADMIN),
-  validateRequest(changeStatusZodSchema),
-  adminChangeStatus
+  "/:id/confirm-delivery",
+  auth(UserRole.RECEIVER),
+  ParcelController.confirmDelivery
 );
-
-/**
- * SENDER: my created parcels
- */
-router.get("/me/sent", auth(UserRole.SENDER), getMyParcels);
-
-/**
- * RECEIVER: incoming parcels for me
- */
-router.get("/me/incoming", auth(UserRole.RECEIVER), getIncomingParcels);
-
 export const ParcelRoutes = router;

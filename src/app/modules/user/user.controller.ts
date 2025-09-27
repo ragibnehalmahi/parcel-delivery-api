@@ -1,33 +1,19 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { NextFunction, Request, Response } from "express";
 import httpStatus from "http-status-codes";
 import { JwtPayload } from "jsonwebtoken";
-import { catchAsync } from "../../utils/catchAsync"; 
-import { sendResponse } from "../../utils/sendResponse";
+import catchAsync from "../../utils/catchAsync";
+import sendResponse from "../../utils/sendResponse";
+ 
 import { UserServices } from "./user.service";
-import { UserRole } from "./user.interface";
-
-/**
- * Create a new user
- */
+import AppError from "../../../errorHelpers/appError";
+ // Create a new user
+ 
 const createUser = catchAsync(async (req: Request, res: Response) => {
-  const { user, tokens } = await UserServices.createUser(req.body);
-
-  // Set cookies
-  res.cookie('accessToken', tokens.accessToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    maxAge: 15 * 60 * 1000 // 15 minutes
-  });
-
-  res.cookie('refreshToken', tokens.refreshToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production', 
-    maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
-  });
-
+  const user = await UserServices.createUser(req.body);
   sendResponse(res, {
     success: true,
-    status: httpStatus.CREATED,
+    statusCode: httpStatus.CREATED,
     message: "User Created Successfully",
     data: {
       user: {
@@ -35,63 +21,65 @@ const createUser = catchAsync(async (req: Request, res: Response) => {
         name: user.name,
         email: user.email,
         role: user.role,
-        status: user.status
+        status: user.status,
       },
-      tokens
     }
   });
 });
 
-/**
- * Update a user
- */
+ 
+ //Update a user
+ 
 const updateUser = catchAsync(async (req: Request, res: Response) => {
-  const userId = req.params.id;
-  const verifiedToken = req.user; // from auth middleware
-  const payload = req.body;
+  const authUser = req.user as { _id: string; role: string; status: string };
 
-  const user = await UserServices.updateUser(
-    userId,
-    payload,
-    verifiedToken as JwtPayload
-  );
+   
+  const { id } = req.params;
+
+  const updatedUser = await UserServices.updateUser(id, req.body, authUser);
 
   sendResponse(res, {
     success: true,
-    status: httpStatus.OK,
-    message: "User Updated Successfully",
-    data: user,
+    statusCode: httpStatus.OK,
+    message: "User updated successfully",
+    data: updatedUser,
   });
 });
 
-/**
- * Get all users
- */
+
+
+ 
+ //Get all users
+ 
 const getAllUsers = catchAsync(async (req: Request, res: Response) => {
   const result = await UserServices.getAllUsers();
 
   sendResponse(res, {
     success: true,
-    status: httpStatus.OK,
-    message: "All Users Retrieved Successfully",
+    statusCode: 200,
+    message: "All users fetched successfully",
+    meta: result.meta,
     data: result.data,
-     metadata: {
-        totalCount:  result.data.length,
-      },
   });
 });
+const getMyProfile = catchAsync(async (req: Request, res: Response) => {
+  // req.user comes from auth middleware
+  const userId = (req as any).user._id; 
+  
+  const user = await UserServices.getMyProfile(userId);
 
-/**
- * Admin-only special feature
- * Example: Get sensitive system stats or all deleted/blocked users
- */
- 
-
-   
-
+  sendResponse(res, {
+    success: true,
+    statusCode: httpStatus.OK,
+    message: "Profile retrieved successfully",
+    data: user,
+  });
+});
+ 
 export const UserControllers = {
   createUser,
   getAllUsers,
   updateUser,
- 
+  getMyProfile
 };
+

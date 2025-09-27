@@ -1,15 +1,16 @@
-export default class AppError extends Error {
-  public readonly statusCode: number;
-  public readonly isOperational: boolean;
+class AppError extends Error {
+  public statusCode: number;
 
-  constructor(statusCode: number, message: string, isOperational = true) {
+  constructor(message: string, statusCode: number, stack?: string) {
     super(message);
-
-    Object.setPrototypeOf(this, new.target.prototype);
-
     this.statusCode = statusCode;
-    this.isOperational = isOperational;
 
-    Error.captureStackTrace(this);
+    if (stack) {
+      this.stack = stack;
+    } else {
+      Error.captureStackTrace(this, this.constructor);
+    }
   }
 }
+
+export default AppError;
