@@ -1,42 +1,47 @@
-import express from 'express';
-import cors from 'cors';
-import { ParcelRoutes } from './app/modules/parcel/parcel.route'; 
-//ort { globalErrorHandler } from './middlewares/globalErrorHandler';
-import { Request, Response } from 'express';
-import bodyParser from 'body-parser';
-import { UserRouter } from './app/modules/user/user.route';
-import { AuthRoutes } from './app/modules/auth/auth.route';
-import router from './app/routes';
+import express, { Request, Response, NextFunction } from "express";
+import cookieParser from "cookie-parser";
+import cors from "cors";
+import router from "./app/routes";
 
 const app = express();
-app.use(cors({
-  origin: 'http://localhost:5173',
-  credentials: true,
-}));
-app.use(express.json());
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
 
-app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  if (err instanceof SyntaxError) {
-    return res.status(400).json({
-      success: false,
-      message: 'Invalid JSON payload'
-    });
-  }
-  next();
-});
+// ✅ Middleware order খুব গুরুত্বপূর্ণ
 
+// 1️⃣ CORS config
+app.use(
+  cors({
+    origin: ["http://localhost:5173"], // তোমার frontend URL
+    credentials: true, // cookies পাঠানোর অনুমতি
+  })
+);
+
+// 2️⃣ Body parsers (CORS এর পরেই)
+app.use(express.json()); // <-- JSON body পার্স করবে
+app.use(express.urlencoded({ extended: true })); // form data পার্স করবে
+
+// 3️⃣ Cookie parser
+app.use(cookieParser());
+
+// ✅ Root route
 app.get("/", (req: Request, res: Response) => {
   res.status(200).json({
-    message: "Welcome to parcel delivery app"
+    message: "Welcome to parcel delivery app 🚚",
   });
 });
 
-app.use('/api/v1/', router);
- 
+// ✅ Main router
+app.use("/api/v1", router);
 
- 
+// ✅ Global JSON parse error handler
+app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+  if (err instanceof SyntaxError && "body" in err) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid JSON payload",
+    });
+  }
+  next(err);
+});
 
 export default app;
 

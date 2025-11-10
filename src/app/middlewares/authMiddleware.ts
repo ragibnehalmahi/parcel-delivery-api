@@ -1,34 +1,34 @@
- 
 import { Request, Response, NextFunction } from "express";
 import jwt, { JwtPayload, TokenExpiredError } from "jsonwebtoken";
 import { UserRole, UserStatus } from "../modules/user/user.interface";
 import { envVars } from "../config";
 
-// Custom request type (authenticated)
 export type AuthenticatedRequest = Request & {
   user: { _id: string; role: UserRole; status: UserStatus };
 };
 
-// Auth middleware with role-based access control
 export const auth =
   (...allowedRoles: UserRole[]) =>
   (req: Request, res: Response, next: NextFunction) => {
     try {
-      const authHeader = req.headers.authorization;
+      const authHeader = req.cookies?.accessToken || req.headers?.authorization;
 
-      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      console.log("🔹 Auth Header:", authHeader);
+      console.log("🔹 Cookies:", req.cookies);
+
+      if (!authHeader) {
         return res.status(401).json({
           success: false,
           message: "Unauthorized: Missing or invalid token",
         });
       }
 
-      const token = authHeader.split(" ")[1];
+      // Handle both Bearer and cookie tokens
+      const token = authHeader.startsWith("Bearer ")
+        ? authHeader.split(" ")[1]
+        : authHeader;
 
-      const decoded = jwt.verify(
-        token,
-        envVars.JWT_ACCESS_SECRET
-      ) as JwtPayload & {
+      const decoded = jwt.verify(token, envVars.JWT_ACCESS_SECRET) as JwtPayload & {
         _id?: string;
         id?: string;
         userId?: string;
@@ -36,7 +36,6 @@ export const auth =
         status?: UserStatus;
       };
 
-      // Normalize ID (supports different key names)
       const normalizedId = decoded._id || decoded.userId || decoded.id;
 
       if (!normalizedId || !decoded.role) {
@@ -46,17 +45,12 @@ export const auth =
         });
       }
 
-      // Ensure status exists (default to ACTIVE)
-      const normalizedStatus = decoded.status ?? UserStatus.ACTIVE;
-
-      // Attach user info to request
       (req as AuthenticatedRequest).user = {
         _id: normalizedId,
         role: decoded.role,
-        status: normalizedStatus,
+        status: decoded.status ?? UserStatus.ACTIVE,
       };
 
-      // Role-based access check
       if (
         allowedRoles.length > 0 &&
         !allowedRoles.includes((req as AuthenticatedRequest).user.role)

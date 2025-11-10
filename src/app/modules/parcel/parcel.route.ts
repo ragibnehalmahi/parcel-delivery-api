@@ -12,7 +12,7 @@ router.get("/track/:trackingId", ParcelController.trackParcel);
 // Create parcel (Sender only)
 
 router.post(
-  "/",
+  "/parcel-create",
   auth(UserRole.SENDER),
   validate(createParcelValidation),
   ParcelController.createParcel
@@ -20,7 +20,7 @@ router.post(
 
 // Get all parcels (Admin only)
 router.get(
-  "/",
+  "/all-parcels",
   auth(UserRole.ADMIN),
   ParcelController.getAllParcels
 );
@@ -37,7 +37,11 @@ router.get(
   auth(UserRole.RECEIVER),
   ParcelController.getIncomingParcels
 );
-
+router.get(
+  "/delivered",
+  auth(UserRole.ADMIN, UserRole.SENDER, UserRole.RECEIVER),
+  ParcelController.getDeliveredParcels
+);
 // Get single parcel (Sender, Receiver, Admin)
 router.get(
   "/:id",
@@ -63,7 +67,7 @@ router.patch(
 // Delete parcel (Admin only)
 router.delete(
   "/:id",
-  auth(UserRole.ADMIN),
+  auth(UserRole.ADMIN,UserRole.SENDER),
   ParcelController.deleteParcel
 );
 // Confirm delivery (Receiver only)
@@ -73,4 +77,19 @@ router.patch(
   auth(UserRole.RECEIVER),
   ParcelController.confirmDelivery
 );
+
+// ✅ Delivered parcels (Admin, Sender, Receiver)
+router.get("/delivered", auth(UserRole.ADMIN, UserRole.SENDER, UserRole.RECEIVER), ParcelController.getDeliveredParcels);
+
+// ✅ Parcel stats (Admin only)
+router.get("/stats", auth(UserRole.ADMIN), ParcelController.getParcelStats);
+
+// ✅ Block / Unblock (Admin)
+router.patch("/:id/block", auth(UserRole.ADMIN), ParcelController.blockParcel);
+router.patch("/:id/unblock", auth(UserRole.ADMIN), ParcelController.unblockParcel);
+
+// ✅ Update parcel (Admin or Sender)
+router.patch("/:id", auth(UserRole.ADMIN, UserRole.SENDER), ParcelController.updateParcel);
+
 export const ParcelRoutes = router;
+ 

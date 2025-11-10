@@ -88,18 +88,49 @@ const updateUser = async (
 };
 const getMyProfile = async (userId: string): Promise<IUser> => {
   const user = await User.findById(userId).select('-password');
+  console.log('Fetched user profile:1', user);
+  if (!user) {
+
+    throw new AppError("User not found", httpStatus.NOT_FOUND);
+  }
+ console.log('Fetched user profile:2', user);
+  if (user.status !== 'ACTIVE') {
+    throw new AppError("User account is not active", httpStatus.FORBIDDEN);
+  }
+ console.log('Fetched user profile:3', user);
+  return user;
   
+};
+const updateUserStatus = async (userId: string, status: string): Promise<IUser> => {
+  // 🔹 User exist check
+  const user = await User.findById(userId);
   if (!user) {
     throw new AppError("User not found", httpStatus.NOT_FOUND);
   }
 
-  if (user.status !== 'ACTIVE') {
-    throw new AppError("User account is not active", httpStatus.FORBIDDEN);
+  // 🔹 Status validation - case insensitive
+  const normalizedStatus = status.toUpperCase();
+  if (!["ACTIVE", "BLOCKED"].includes(normalizedStatus)) {
+    throw new AppError("Invalid status value", httpStatus.BAD_REQUEST);
   }
+
+  // 🔹 Update user status
+  user.status = normalizedStatus as UserStatus;
+  await user.save();
 
   return user;
 };
 
+const searchUserByEmail = async (email: string): Promise<IUser | null> => {
+  if (!email) {
+    throw new Error("Email query parameter is required");
+  }
+
+  // case-insensitive search (optional)
+  const user = await User.findOne({ email: { $regex: new RegExp(`^${email}$`, "i") } });
+
+  return user;
+};
 /**
  * Get all users
  */
@@ -118,5 +149,5 @@ export const UserServices = {
   createUser,
   getAllUsers,
   updateUser,
-  getMyProfile
+  getMyProfile,searchUserByEmail,updateUserStatus
 };

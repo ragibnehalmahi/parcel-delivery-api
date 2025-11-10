@@ -6,6 +6,7 @@ import { ParcelService } from "./parcel.service";
  import  { decodedToken } from "../../utils/decodeToken";
 import AppError from "../../../errorHelpers/appError";
 import { JwtPayload } from "jsonwebtoken";
+import { AuthenticatedRequest } from "../../middlewares/authMiddleware";
  
  
 
@@ -47,26 +48,40 @@ const getAllParcels = catchAsync(async (req: Request, res: Response) => {
     data: parcels,
   });
 });
+const getDeliveredParcels = catchAsync(async (req: Request, res: Response) => {
+  const user = req.user;
+  const result = await ParcelService.getDeliveredParcels(user);
 
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: "Delivered parcels fetched successfully",
+    data: result,
+  });
+});
 // Get my parcels (Sender)
-export const getMyParcels = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-   
-  if (!req.user) {
-    throw new AppError('Unauthorized: User data not found.',httpStatus.UNAUTHORIZED, );
-  }
-  
-   
-  const senderId = req.user.id;
+export const getMyParcels = catchAsync(async (req: Request, res: Response) => {
+  const user = (req as AuthenticatedRequest).user;
 
-  const parcels = await ParcelService.getMyParcels(senderId);
+  if (!user || !user._id) {
+    throw new AppError("Unauthorized: User data not found.", httpStatus.UNAUTHORIZED);
+  }
+
+  console.log("🔹 Sender ID from token:", user._id);
+
+  const parcels = await ParcelService.getMyParcels(user._id);
 
   sendResponse(res, {
     success: true,
     statusCode: httpStatus.OK,
-    message: 'Your parcels retrieved successfully',
+    message:
+      parcels.length > 0
+        ? "Your parcels retrieved successfully"
+        : "No parcels found",
     data: parcels,
   });
 });
+
  
 const getIncomingParcels = catchAsync(async (req: Request, res: Response) => {
   
@@ -158,12 +173,12 @@ const deleteParcel = catchAsync(async (req: Request, res: Response) => {
 });
 // Confirm delivery (Receiver only)
 const confirmDelivery = catchAsync(async (req: Request, res: Response) => {
-  const user = req.user; // Assuming your authentication middleware attaches the user to the request
+  const user = req.user;
   if (!user) {
     throw new AppError("Unauthorized: No user found", httpStatus.UNAUTHORIZED);
   }
 
-  const { id } = req.params;
+  const { id } = req.params; // ✅ এখন এটা parcelId হবে
   const receiverId = user._id;
 
   const parcel = await ParcelService.confirmDelivery(id, receiverId);
@@ -175,6 +190,7 @@ const confirmDelivery = catchAsync(async (req: Request, res: Response) => {
     data: parcel,
   });
 });
+
 
  // 🔹 Public tracking controller
 const trackParcel = async (req: Request, res: Response) => {
@@ -202,7 +218,48 @@ const trackParcel = async (req: Request, res: Response) => {
     });
   }
 };
+const getParcelStats = catchAsync(async (req: Request, res: Response) => {
+  const stats = await ParcelService.getParcelStats();
+  sendResponse(res, {
+    success: true,
+    statusCode: httpStatus.OK,
+    message: "Parcel statistics fetched successfully",
+    data: stats,
+  });
+});
 
+const blockParcel = catchAsync(async (req: Request, res: Response) => {
+  const parcel = await ParcelService.blockParcel(req.params.id);
+  sendResponse(res, {
+    success: true,
+    statusCode: httpStatus.OK,
+    message: "Parcel blocked successfully",
+    data: parcel,
+  });
+});
+
+const unblockParcel = catchAsync(async (req: Request, res: Response) => {
+  const parcel = await ParcelService.unblockParcel(req.params.id);
+  sendResponse(res, {
+    success: true,
+    statusCode: httpStatus.OK,
+    message: "Parcel unblocked successfully",
+    data: parcel,
+  });
+});
+
+const updateParcel = catchAsync(async (req: Request, res: Response) => {
+  const user = req.user;
+  if (!user) throw new AppError("Unauthorized", httpStatus.UNAUTHORIZED);
+  const parcel = await ParcelService.updateParcel(req.params.id, user, req.body);
+
+  sendResponse(res, {
+    success: true,
+    statusCode: httpStatus.OK,
+    message: "Parcel updated successfully",
+    data: parcel,
+  });
+});
 
  
 export const ParcelController = {
@@ -216,7 +273,11 @@ export const ParcelController = {
   deleteParcel,
   confirmDelivery,
   trackParcel,
-
+   getDeliveredParcels,
+getParcelStats,
+  blockParcel,
+  unblockParcel,
+  updateParcel,
 };
  
 

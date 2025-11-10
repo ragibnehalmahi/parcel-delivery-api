@@ -75,11 +75,64 @@ const getMyProfile = catchAsync(async (req: Request, res: Response) => {
     data: user,
   });
 });
- 
+const updateUserStatus = catchAsync(async (req: Request, res: Response) => {
+  console.log("🟢 Incoming params:", req.params);
+  console.log("🟢 Incoming body:", req.body);
+
+  const { id } = req.params;
+  const status = req.body?.status; // ✅ Safe destructure (undefined হলে crash করবে না)
+
+  // ✅ Validation
+  if (!status) {
+    throw new AppError("Status field is required", httpStatus.BAD_REQUEST);
+  }
+
+  const updatedUser = await UserServices.updateUserStatus(id, status);
+
+  sendResponse(res, {
+    success: true,
+    statusCode: httpStatus.OK,
+    message: "User status updated successfully",
+    data: updatedUser,
+  });
+});
+ const searchUserByEmail = async (req: Request, res: Response) => {
+  try {
+    const { email } = req.query;
+
+    if (!email || typeof email !== "string") {
+      return res.status(400).json({
+        success: false,
+        message: "Email query parameter is required",
+      });
+    }
+
+    const user = await UserServices.searchUserByEmail(email);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "User found successfully",
+      data: user,
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
+  }
+};
 export const UserControllers = {
   createUser,
   getAllUsers,
   updateUser,
-  getMyProfile
+  getMyProfile,
+  searchUserByEmail,updateUserStatus
 };
 

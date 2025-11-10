@@ -16,16 +16,20 @@ router.get(
 );
 // Get all users (admin only)
 router.get(
-  "/",
+  "/allusers",
   auth(UserRole.ADMIN), // Only admins can get all users
   UserControllers.getAllUsers
 );
-
+router.get("/search", UserControllers.searchUserByEmail);
 // Update user (requires authentication)
 router.patch(
-  "/:id",
+  "/:id/",
   auth(UserRole.ADMIN), // Admin, sender, receiver can update (restrictions in service)
   UserControllers.updateUser
 );
- 
+ router.patch(
+  "/:id/status",
+  auth(UserRole.ADMIN), // only admin can change user status
+  UserControllers.updateUserStatus
+);
 export const UserRouter = router;
