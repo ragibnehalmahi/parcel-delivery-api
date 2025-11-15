@@ -110,7 +110,7 @@ const updateUserStatus = async (userId: string, status: string): Promise<IUser> 
 
   // 🔹 Status validation - case insensitive
   const normalizedStatus = status.toUpperCase();
-  if (!["ACTIVE", "BLOCKED"].includes(normalizedStatus)) {
+  if (!["ACTIVE", "BLOCKED", "INACTIVE"].includes(normalizedStatus)) {
     throw new AppError("Invalid status value", httpStatus.BAD_REQUEST);
   }
 

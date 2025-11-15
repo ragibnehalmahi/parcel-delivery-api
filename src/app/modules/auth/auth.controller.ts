@@ -100,33 +100,52 @@ const changePassword = catchAsync(async (req: Request, res: Response) => {
 });
 
 // ✅ Logout Controller (Fully Fixed)
-const logoutUser = catchAsync(async (req: Request, res: Response) => {
- const refreshToken =
-    req.body.refreshToken ||
-    req.cookies?.refreshToken ||
-    req.headers["x-refresh-token"];
+// const logout = catchAsync(async (req: Request, res: Response) => {
+//  const refreshToken =
+//     req.body.refreshToken ||
+//     req.cookies?.refreshToken ||
+//     req.headers["x-refresh-token"];
 
-  if (!refreshToken) {
-    throw new AppError("Refresh token is required for logout", httpStatus.BAD_REQUEST);
-  }
+//   if (!refreshToken) {
+//     throw new AppError("Refresh token is required for logout", httpStatus.BAD_REQUEST);
+//   }
 
-  const result = await AuthService.logoutUser(refreshToken);
+//   const result = await AuthService.logout(refreshToken);
 
-  // Clear cookies from browser
-  clearAuthCookies(res);
+//   // Clear cookies from browser
+//   clearAuthCookies(res);
 
-  sendResponse(res, {
-    statusCode: httpStatus.OK,
-    success: true,
-    message: "Logout successful",
-    data: result,
-  });
-});
+//   sendResponse(res, {
+//     statusCode: httpStatus.OK,
+//     success: true,
+//     message: "Logout successful",
+//     data: result,
+//   });
+// });
+const logout = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
 
+    res.clearCookie("accessToken", {
+        httpOnly: true,
+        secure: false,
+        sameSite: "lax"
+    })
+    res.clearCookie("refreshToken", {
+        httpOnly: true,
+        secure: false,
+        sameSite: "lax"
+    })
+
+    sendResponse(res, {
+        success: true,
+        statusCode: httpStatus.OK,
+        message: "User Logged Out Successfully",
+        data: null,
+    })
+})
 export const AuthController = {
   credentialsLogin,
   refreshToken,
   changePassword,
-  logoutUser,
+  logout
 };
 

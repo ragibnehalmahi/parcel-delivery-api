@@ -159,28 +159,28 @@ const tokenSchema = new Schema(
 const TokenModel = model("Token", tokenSchema);
 
 // ------------------ UPDATED LOGOUT FUNCTION ------------------
-const logoutUser = async (refreshToken: string) => {
-  if (!refreshToken) {
-    throw new AppError("No refresh token provided", httpStatus.BAD_REQUEST);
-  }
+// const logout = async (refreshToken: string) => {
+//   if (!refreshToken) {
+//     throw new AppError("No refresh token provided", httpStatus.BAD_REQUEST);
+//   }
 
-  // ✅ Remove the token from DB
-  const deleted = await TokenModel.findOneAndDelete({ token: refreshToken });
-  if (!deleted) {
-    throw new AppError("Invalid or already expired token", httpStatus.NOT_FOUND);
-  }
+//   // ✅ Remove the token from DB
+//   const deleted = await TokenModel.findOneAndDelete({ token: refreshToken });
+//   if (!deleted) {
+//     throw new AppError("Invalid or already expired token", httpStatus.NOT_FOUND);
+//   }
 
-  console.log("✅ Token removed successfully from DB");
+//   console.log("✅ Token removed successfully from DB");
 
-  return { message: "Logout successful" };
-};
+//   return { message: "Logout successful" };
+// };
 
 // ------------------ EXPORT ------------------
 export const AuthService = {
   credentialsLogin,
   getNewAccessToken,
   changePassword,
-  logoutUser,
+  // logout,
 };
 
 

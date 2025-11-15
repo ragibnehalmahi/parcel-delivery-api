@@ -24,7 +24,7 @@ router.get("/search", UserControllers.searchUserByEmail);
 // Update user (requires authentication)
 router.patch(
   "/:id/",
-  auth(UserRole.ADMIN), // Admin, sender, receiver can update (restrictions in service)
+  auth(UserRole.ADMIN,UserRole.SENDER,UserRole.RECEIVER), // Admin, sender, receiver can update (restrictions in service)
   UserControllers.updateUser
 );
  router.patch(

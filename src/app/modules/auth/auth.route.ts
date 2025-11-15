@@ -12,7 +12,7 @@ router.post("/login", AuthController.credentialsLogin);
 router.post("/refresh-token", AuthController.refreshToken);
 
 // Logout
-router.post("/logoutUser", AuthController.logoutUser);
+router.post("/logout", AuthController.logout);
 
 // Reset password (only logged-in users)
 router.post("/change-password", auth(UserRole.ADMIN, UserRole.SENDER, UserRole.RECEIVER), AuthController.changePassword);
